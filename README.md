@@ -1,0 +1,435 @@
+<html class="scroll-smooth" lang="pt-BR">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <title>
+   Mensagem Efêmera Online
+  </title>
+  <script src="https://cdn.tailwindcss.com">
+  </script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;display=swap" rel="stylesheet"/>
+  <style>
+   body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+ </head>
+ <body class="bg-gray-50 min-h-screen flex flex-col">
+  <header class="bg-indigo-600 text-white flex items-center justify-between px-4 py-3 shadow-md">
+   <div class="flex items-center space-x-3">
+    <i class="fas fa-comment-alt fa-2x" style="color:#4F46E5">
+    </i>
+    <h1 class="text-xl font-semibold select-none" style="color:#4F46E5">
+     MsgEfêmera
+    </h1>
+   </div>
+   <div class="flex items-center space-x-4">
+    <input class="rounded-md px-3 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" id="searchSerial" placeholder="Buscar por número de série" type="text"/>
+    <button class="bg-indigo-500 hover:bg-indigo-700 text-white px-3 py-1 rounded-md" id="btnSearch" title="Buscar usuário">
+     <i class="fas fa-search">
+     </i>
+    </button>
+   </div>
+  </header>
+  <main class="flex-grow flex flex-col md:flex-row max-w-7xl mx-auto p-4 gap-4">
+   <!-- Lista de usuários -->
+   <section class="md:w-1/3 bg-white rounded-lg shadow-md p-4 flex flex-col" id="userListSection">
+    <h2 class="text-lg font-semibold mb-3 text-indigo-600 flex items-center gap-2">
+     <i class="fas fa-users">
+     </i>
+     Usuários Online
+    </h2>
+    <ul class="flex flex-col gap-3 overflow-y-auto max-h-[60vh]" id="userList">
+     <!-- Usuários serão inseridos aqui -->
+    </ul>
+    <button class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md" id="btnNewUser">
+     Criar Novo Usuário
+    </button>
+   </section>
+   <!-- Conversa -->
+   <section class="md:w-2/3 bg-white rounded-lg shadow-md flex flex-col" id="chatSection">
+    <header class="flex items-center gap-4 border-b border-gray-200 p-4" id="chatHeader">
+     <img alt="Avatar do usuário selecionado" class="w-12 h-12 rounded-full object-cover border-2 border-indigo-600 cursor-pointer" height="48" id="chatUserAvatar" src="https://storage.googleapis.com/a1aa/image/c8bd6f3b-b575-4d4b-b195-d0b5f7058a42.jpg" title="Clique para trocar a foto" width="48"/>
+     <div class="flex flex-col">
+      <input class="text-xl font-semibold border-b border-transparent focus:border-indigo-600 focus:outline-none" id="chatUserName" maxlength="20" readonly="" title="Clique para editar o nome" type="text"/>
+      <span class="text-sm text-gray-500 select-text" id="chatUserSerial" title="Número de série do usuário">
+      </span>
+     </div>
+     <button class="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-md flex items-center gap-2" id="btnCopyLink" title="Copiar link da conversa">
+      <i class="fas fa-link">
+      </i>
+      Link
+     </button>
+    </header>
+    <div class="flex-grow p-4 overflow-y-auto space-y-3 bg-gray-50" id="messagesContainer">
+     <!-- Mensagens aparecerão aqui -->
+    </div>
+    <form class="border-t border-gray-200 p-4 flex gap-3 items-center" id="formSendMessage">
+     <input autocomplete="off" class="flex-grow rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" id="inputMessage" maxlength="200" placeholder="Digite sua mensagem..." required="" type="text"/>
+     <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md" type="submit">
+      Enviar
+     </button>
+    </form>
+   </section>
+  </main>
+  <footer class="text-center text-gray-500 text-sm py-4 select-none">
+   © 2024 MsgEfêmera - Mensagens que desaparecem em 10 segundos
+  </footer>
+  <input accept="image/*" aria-label="Selecionar nova foto de perfil" class="hidden" id="inputFileAvatar" type="file"/>
+  <script>
+   (() => {
+      // Configurações
+      const APP_COLOR = '#4F46E5'; // Indigo-600
+      const MESSAGE_LIFETIME = 10000; // 10 segundos
+      const STORAGE_KEY = 'msgEpheremaData';
+
+      // Elementos
+      const userListEl = document.getElementById('userList');
+      const btnNewUser = document.getElementById('btnNewUser');
+      const chatUserAvatar = document.getElementById('chatUserAvatar');
+      const chatUserName = document.getElementById('chatUserName');
+      const chatUserSerial = document.getElementById('chatUserSerial');
+      const messagesContainer = document.getElementById('messagesContainer');
+      const formSendMessage = document.getElementById('formSendMessage');
+      const inputMessage = document.getElementById('inputMessage');
+      const btnCopyLink = document.getElementById('btnCopyLink');
+      const inputFileAvatar = document.getElementById('inputFileAvatar');
+      const searchSerialInput = document.getElementById('searchSerial');
+      const btnSearch = document.getElementById('btnSearch');
+
+      // Dados da aplicação
+      let data = {
+        users: [],
+        conversations: {}, // { serial: [ {id, text, timestamp} ] }
+      };
+
+      // Usuário selecionado na conversa
+      let currentUserSerial = null;
+
+      // Gera um número de série único (8 dígitos hex)
+      function generateSerial() {
+        return Math.floor(Math.random() * 0xffffffff)
+          .toString(16)
+          .padStart(8, '0');
+      }
+
+      // Gera um nome aleatório
+      const randomNames = [
+        'Aurora', 'Bruno', 'Catarina', 'Diego', 'Elisa', 'Felipe', 'Gabriela',
+        'Heitor', 'Isadora', 'João', 'Karla', 'Lucas', 'Marina', 'Nicolas',
+        'Olívia', 'Pedro', 'Quésia', 'Rafael', 'Sofia', 'Tiago', 'Úrsula',
+        'Vitor', 'Wesley', 'Xênia', 'Yara', 'Zeca'
+      ];
+      function getRandomName() {
+        return randomNames[Math.floor(Math.random() * randomNames.length)];
+      }
+
+      // Cria um usuário novo com nome, serial e avatar padrão
+      function createNewUser() {
+        const serial = generateSerial();
+        const name = getRandomName();
+        const avatarUrl = `https://placehold.co/48x48/png?text=${encodeURIComponent(
+          name.charAt(0)
+        )}&bg=4F46E5&fg=ffffff&font=Inter&font-weight=600`;
+        const user = {
+          serial,
+          name,
+          avatarUrl,
+          color: APP_COLOR,
+        };
+        data.users.push(user);
+        data.conversations[serial] = [];
+        saveData();
+        renderUserList();
+        selectUser(serial);
+      }
+
+      // Salva os dados no localStorage
+      function saveData() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+
+      // Carrega os dados do localStorage
+      function loadData() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            data = JSON.parse(saved);
+          } catch {
+            data = { users: [], conversations: {} };
+          }
+        }
+      }
+
+      // Renderiza a lista de usuários
+      function renderUserList() {
+        userListEl.innerHTML = '';
+        if (data.users.length === 0) {
+          userListEl.innerHTML =
+            '<li class="text-gray-500 select-none">Nenhum usuário criado.</li>';
+          return;
+        }
+        data.users.forEach((user) => {
+          const li = document.createElement('li');
+          li.className =
+            'flex items-center gap-3 p-2 rounded-md cursor-pointer hover:bg-indigo-50 transition-colors';
+          if (user.serial === currentUserSerial) {
+            li.classList.add('bg-indigo-100');
+          }
+          const img = document.createElement('img');
+          img.src = user.avatarUrl;
+          img.alt = `Avatar do usuário ${user.name}, círculo com fundo azul índigo e letra inicial branca`;
+          img.className = 'w-10 h-10 rounded-full object-cover border-2 border-indigo-600 flex-shrink-0';
+          const div = document.createElement('div');
+          div.className = 'flex flex-col';
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = user.name;
+          nameSpan.className = 'font-semibold text-indigo-700';
+          const serialSpan = document.createElement('span');
+          serialSpan.textContent = `#${user.serial}`;
+          serialSpan.className = 'text-xs text-gray-500 select-text';
+          div.appendChild(nameSpan);
+          div.appendChild(serialSpan);
+          li.appendChild(img);
+          li.appendChild(div);
+          li.addEventListener('click', () => {
+            selectUser(user.serial);
+          });
+          userListEl.appendChild(li);
+        });
+      }
+
+      // Seleciona um usuário para conversar
+      function selectUser(serial) {
+        if (!serial || !data.users.find((u) => u.serial === serial)) return;
+        currentUserSerial = serial;
+        const user = data.users.find((u) => u.serial === serial);
+        chatUserAvatar.src = user.avatarUrl;
+        chatUserAvatar.alt = `Avatar do usuário ${user.name}, círculo com fundo azul índigo e letra inicial branca`;
+        chatUserName.value = user.name;
+        chatUserName.readOnly = true;
+        chatUserSerial.textContent = `Número de série: #${user.serial}`;
+        renderMessages();
+        renderUserList();
+        updateLinkButton();
+      }
+
+      // Renderiza as mensagens da conversa atual
+      function renderMessages() {
+        messagesContainer.innerHTML = '';
+        if (!currentUserSerial) return;
+        const messages = data.conversations[currentUserSerial] || [];
+        const now = Date.now();
+
+        // Remove mensagens expiradas
+        const filteredMessages = messages.filter(
+          (msg) => now - msg.timestamp < MESSAGE_LIFETIME
+        );
+        if (filteredMessages.length !== messages.length) {
+          data.conversations[currentUserSerial] = filteredMessages;
+          saveData();
+        }
+
+        filteredMessages.forEach((msg) => {
+          const div = document.createElement('div');
+          div.className =
+            'bg-indigo-100 text-indigo-900 rounded-lg px-4 py-2 max-w-xs break-words shadow-sm relative';
+          div.textContent = msg.text;
+
+          // Timer bar
+          const timeLeft = MESSAGE_LIFETIME - (now - msg.timestamp);
+          const timerBar = document.createElement('div');
+          timerBar.className =
+            'absolute bottom-0 left-0 h-1 bg-indigo-600 rounded-b-lg';
+          timerBar.style.width = '100%';
+          div.appendChild(timerBar);
+
+          // Animate timer bar shrinking
+          let start = null;
+          function animate(timestamp) {
+            if (!start) start = timestamp;
+            const elapsed = timestamp - start;
+            const widthPercent = Math.max(
+              0,
+              100 - (elapsed / MESSAGE_LIFETIME) * 100
+            );
+            timerBar.style.width = widthPercent + '%';
+            if (elapsed < timeLeft) {
+              requestAnimationFrame(animate);
+            }
+          }
+          requestAnimationFrame(animate);
+
+          messagesContainer.appendChild(div);
+        });
+
+        // Scroll para o fim
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+
+      // Envia uma mensagem
+      function sendMessage(text) {
+        if (!currentUserSerial) return;
+        const msg = {
+          id: crypto.randomUUID(),
+          text,
+          timestamp: Date.now(),
+        };
+        data.conversations[currentUserSerial].push(msg);
+        saveData();
+        renderMessages();
+      }
+
+      // Atualiza o link da conversa no botão
+      function updateLinkButton() {
+        if (!currentUserSerial) {
+          btnCopyLink.disabled = true;
+          btnCopyLink.title = 'Selecione um usuário para obter o link';
+          return;
+        }
+        btnCopyLink.disabled = false;
+        btnCopyLink.title = 'Copiar link da conversa';
+      }
+
+      // Copia o link da conversa para a área de transferência
+      function copyLink() {
+        if (!currentUserSerial) return;
+        const url = new URL(window.location.href);
+        url.searchParams.set('chat', currentUserSerial);
+        navigator.clipboard.writeText(url.toString()).then(() => {
+          alert('Link da conversa copiado!');
+        });
+      }
+
+      // Atualiza o nome do usuário (editável)
+      function enableNameEdit() {
+        chatUserName.readOnly = false;
+        chatUserName.focus();
+        chatUserName.select();
+      }
+      function disableNameEdit() {
+        if (!currentUserSerial) return;
+        chatUserName.readOnly = true;
+        const user = data.users.find((u) => u.serial === currentUserSerial);
+        if (!user) return;
+        const newName = chatUserName.value.trim();
+        if (newName && newName !== user.name) {
+          user.name = newName;
+          // Atualiza avatar com a nova inicial
+          user.avatarUrl = `https://placehold.co/48x48/png?text=${encodeURIComponent(
+            newName.charAt(0).toUpperCase()
+          )}&bg=4F46E5&fg=ffffff&font=Inter&font-weight=600`;
+          saveData();
+          selectUser(currentUserSerial);
+          renderUserList();
+        } else {
+          chatUserName.value = user.name;
+        }
+      }
+
+      // Trocar foto de perfil
+      function triggerAvatarChange() {
+        inputFileAvatar.click();
+      }
+      function handleAvatarChange(event) {
+        if (!currentUserSerial) return;
+        const file = event.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          alert('Por favor, selecione uma imagem válida.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const user = data.users.find((u) => u.serial === currentUserSerial);
+          if (!user) return;
+          user.avatarUrl = e.target.result;
+          saveData();
+          selectUser(currentUserSerial);
+          renderUserList();
+        };
+        reader.readAsDataURL(file);
+        inputFileAvatar.value = '';
+      }
+
+      // Busca usuário pelo número de série
+      function searchUserBySerial() {
+        const serial = searchSerialInput.value.trim().toLowerCase();
+        if (!serial) return;
+        const user = data.users.find((u) => u.serial.toLowerCase() === serial);
+        if (user) {
+          selectUser(user.serial);
+          searchSerialInput.value = '';
+        } else {
+          alert('Usuário não encontrado.');
+        }
+      }
+
+      // Atualiza a conversa se acessada via link
+      function loadChatFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const chatSerial = params.get('chat');
+        if (chatSerial && data.users.find((u) => u.serial === chatSerial)) {
+          selectUser(chatSerial);
+          // Atualiza a página para remover o parâmetro e evitar re-seleção
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+
+      // Limpa mensagens expiradas periodicamente
+      function startMessageCleanup() {
+        setInterval(() => {
+          if (!currentUserSerial) return;
+          const now = Date.now();
+          const messages = data.conversations[currentUserSerial] || [];
+          const filtered = messages.filter(
+            (msg) => now - msg.timestamp < MESSAGE_LIFETIME
+          );
+          if (filtered.length !== messages.length) {
+            data.conversations[currentUserSerial] = filtered;
+            saveData();
+            renderMessages();
+          }
+        }, 2000);
+      }
+
+      // Eventos
+      btnNewUser.addEventListener('click', createNewUser);
+      formSendMessage.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = inputMessage.value.trim();
+        if (text) {
+          sendMessage(text);
+          inputMessage.value = '';
+        }
+      });
+      btnCopyLink.addEventListener('click', copyLink);
+      chatUserName.addEventListener('dblclick', enableNameEdit);
+      chatUserName.addEventListener('blur', disableNameEdit);
+      chatUserAvatar.addEventListener('click', triggerAvatarChange);
+      inputFileAvatar.addEventListener('change', handleAvatarChange);
+      btnSearch.addEventListener('click', searchUserBySerial);
+      searchSerialInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          searchUserBySerial();
+        }
+      });
+
+      // Inicialização
+      loadData();
+      if (data.users.length === 0) {
+        createNewUser();
+      } else {
+        loadChatFromURL();
+        if (!currentUserSerial) {
+          selectUser(data.users[0].serial);
+        }
+      }
+      updateLinkButton();
+      startMessageCleanup();
+    })();
+  </script>
+ </body>
+</html>
